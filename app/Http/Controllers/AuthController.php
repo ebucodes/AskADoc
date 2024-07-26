@@ -2,61 +2,47 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Auth\LoginRequest;
+use App\Http\Requests\Auth\RegisterRequest;
 use App\Models\User;
-use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\JsonResponse;
 
 class AuthController extends Controller
 {
-    /**
-     * Register a new user.
-     */
-    public function register(Request $request)
+    public function register(RegisterRequest $request): JsonResponse
     {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8|confirmed',
-        ]);
+        $data = $request->only(['name', 'email', 'password']);
 
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-        ]);
+        $data['password'] = Hash::make($data['password']);
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        User::create($data);
 
-        return response()->json([
-            'access_token' => $token,
-            'token_type' => 'Bearer',
-        ], 201);
+        return response()->json(['success' => true, "message" => 'Account Created Successfully']);
+
     }
 
-    /**
-     * Login an existing user.
-     */
-    public function login(Request $request)
+    public function login(LoginRequest $request): JsonResponse
     {
-        $request->validate([
-            'email' => 'required|string|email',
-            'password' => 'required|string',
-        ]);
 
-        $user = User::where('email', $request->email)->first();
+        $request->authenticate();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
-            ]);
-        }
+        auth()->user()->tokens()->delete();
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $token = auth()->user()->createToken(config('app.token'));
 
-        return response()->json([
-            'access_token' => $token,
-            'token_type' => 'Bearer',
-        ]);
+        return response()->json(['success' => true, "message" => 'Account Login Successfully', 'data' => auth()->user(), 'token' => $token->plainTextToken]);
+
+    }
+
+    public function logout(): JsonResponse
+    {
+        auth()->user()->tokens()->delete();
+
+        Auth::guard('web')->logout();
+
+        return response()->json(['success' => true, "message" => 'Account Logout Successfully']);
+
     }
 }
